@@ -27,4 +27,5 @@ post_build:
     artifacts:
         files:
             - '**/*'
-        base-directory: s3://trpreprodtechtoc
+        base-directory: public
+        
