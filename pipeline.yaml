@@ -1,0 +1,1531 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "a206706-cicd-206706-tech-toc-vn IaC CI/CD pipeline",
+    "Outputs": {
+        "EnvironmentOrder": {
+            "Description": " Promotion order of environments",
+            "Value": {
+                "Fn::Join": [
+                    ",",
+                    [
+                        "dev"
+                    ]
+                ]
+            }
+        }
+    },
+    "Parameters": {
+        "GitHubToken": {
+            "Description": "Personal Access Token to be used in pipeline",
+            "NoEcho": true,
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "ApprovalLambdaFunction": {
+            "Properties": {
+                "Code": {
+                    "ZipFile": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "import boto3",
+                                "",
+                                "",
+                                "def handler(event, context):",
+                                "    s3 = boto3.resource('s3')",
+                                "    source_bucket = event['source_bucket']",
+                                "    source_key = event['source_key']",
+                                "    dest_bucket = event['dest_bucket']",
+                                "    dest_key = event['dest_key']",
+                                "    print('source_bucket: ' + source_bucket)",
+                                "    print('source_key: ' + source_key)",
+                                "    print('dest_bucket: ' + dest_bucket)",
+                                "    print('dest_key: ' + dest_key)",
+                                "    response = s3.meta.client.get_object(Bucket=source_bucket, Key=source_key)",
+                                "    s3.meta.client.put_object(Bucket=dest_bucket, Key=dest_key, Body=response['Body'].read(), Metadata=response['Metadata'])",
+                                "    return ''"
+                            ]
+                        ]
+                    }
+                },
+                "FunctionName": "a206706-cicd-206706-tech-toc-vn-iac-approval",
+                "Handler": "index.handler",
+                "MemorySize": 2048,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "LambdaExeRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.6",
+                "Tags": [
+                    {
+                        "Key": "tr:application-asset-insight-id",
+                        "Value": "206706"
+                    },
+                    {
+                        "Key": "tr:project-name",
+                        "Value": "206706-tech-toc-vn"
+                    },
+                    {
+                        "Key": "tr:resource-owner",
+                        "Value": "vamon.ngwa@thomsonreuters.com"
+                    },
+                    {
+                        "Key": "tr:service-name",
+                        "Value": "cicd"
+                    }
+                ],
+                "Timeout": 30
+            },
+            "Type": "AWS::Lambda::Function"
+        },
+        "ApprovalLambdaLogGroup": {
+            "Properties": {
+                "LogGroupName": "/aws/lambda/a206706-cicd-206706-tech-toc-vn-iac-approval",
+                "RetentionInDays": 90
+            },
+            "Type": "AWS::Logs::LogGroup"
+        },
+        "ArtifactBucket": {
+            "Properties": {
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "SSEAlgorithm": "AES256"
+                            }
+                        }
+                    ]
+                },
+                "BucketName": "a206706-cicd-206706-tech-toc-vn-iac-artifact",
+                "LifecycleConfiguration": {
+                    "Rules": [
+                        {
+                            "AbortIncompleteMultipartUpload": {
+                                "DaysAfterInitiation": 7
+                            },
+                            "ExpirationInDays": 186,
+                            "Id": "BucketLifecycleRule",
+                            "NoncurrentVersionExpirationInDays": 186,
+                            "Status": "Enabled"
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "tr:application-asset-insight-id",
+                        "Value": "206706"
+                    },
+                    {
+                        "Key": "tr:project-name",
+                        "Value": "206706-tech-toc-vn"
+                    },
+                    {
+                        "Key": "tr:resource-owner",
+                        "Value": "vamon.ngwa@thomsonreuters.com"
+                    },
+                    {
+                        "Key": "tr:service-name",
+                        "Value": "cicd"
+                    }
+                ],
+                "VersioningConfiguration": {
+                    "Status": "Enabled"
+                }
+            },
+            "Type": "AWS::S3::Bucket"
+        },
+        "CBLogGroupdevdryrun": {
+            "Properties": {
+                "LogGroupName": "/aws/codebuild/a206706-cicd-206706-tech-toc-vn-iac-dev-dryrun",
+                "RetentionInDays": 90
+            },
+            "Type": "AWS::Logs::LogGroup"
+        },
+        "CBLogGroupdevexecute": {
+            "Properties": {
+                "LogGroupName": "/aws/codebuild/a206706-cicd-206706-tech-toc-vn-iac-dev-execute",
+                "RetentionInDays": 90
+            },
+            "Type": "AWS::Logs::LogGroup"
+        },
+        "CBSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "a206706-cicd-206706-tech-toc-vn - IaC Codebuild",
+                "GroupName": "a206706-cicd-206706-tech-toc-vn-iac-codebuild",
+                "Tags": [
+                    {
+                        "Key": "tr:application-asset-insight-id",
+                        "Value": "206706"
+                    },
+                    {
+                        "Key": "tr:project-name",
+                        "Value": "206706-tech-toc-vn"
+                    },
+                    {
+                        "Key": "tr:resource-owner",
+                        "Value": "vamon.ngwa@thomsonreuters.com"
+                    },
+                    {
+                        "Key": "tr:service-name",
+                        "Value": "cicd"
+                    }
+                ],
+                "VpcId": "vpc-0f71a5f77d9183ff1"
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "CBdevdryrun": {
+            "Properties": {
+                "Artifacts": {
+                    "Name": "a206706-cicd-206706-tech-toc-vn-iac-dev-dryrun",
+                    "Type": "CODEPIPELINE"
+                },
+                "Description": "a206706-cicd-206706-tech-toc-vn IaC tool. Environment: dev Type: dryrun",
+                "Environment": {
+                    "ComputeType": "BUILD_GENERAL1_SMALL",
+                    "EnvironmentVariables": [
+                        {
+                            "Name": "APPROVAL_SNS",
+                            "Value": {
+                                "Ref": "SNSTdev"
+                            }
+                        },
+                        {
+                            "Name": "NEXT_ENV_SOURCE",
+                            "Value": {
+                                "Fn::Join": [
+                                    "/",
+                                    [
+                                        "a206706-iac-source-vn",
+                                        "tech-toc/dev/execute/config.zip"
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "Name": "NOTIFICATION_SNS",
+                            "Value": {
+                                "Ref": "SNSTdev"
+                            }
+                        }
+                    ],
+                    "Image": "460300312212.dkr.ecr.us-east-1.amazonaws.com/a204503/cloud-iac:2.1.4",
+                    "ImagePullCredentialsType": "SERVICE_ROLE",
+                    "Type": "LINUX_CONTAINER"
+                },
+                "Name": "a206706-cicd-206706-tech-toc-vn-iac-dev-dryrun",
+                "ServiceRole": {
+                    "Fn::GetAtt": [
+                        "CodebuildIAMRole",
+                        "Arn"
+                    ]
+                },
+                "Source": {
+                    "BuildSpec": "\n            version: 0.2\n            \n            phases:\n              build:\n                commands:\n                  - cd $CODEBUILD_SRC_DIR\n                  - cloud-iac deployer dryrun dev",
+                    "Type": "CODEPIPELINE"
+                },
+                "Tags": [
+                    {
+                        "Key": "tr:application-asset-insight-id",
+                        "Value": "206706"
+                    },
+                    {
+                        "Key": "tr:environment-name",
+                        "Value": "dev"
+                    },
+                    {
+                        "Key": "tr:environment-type",
+                        "Value": "DEVELOPMENT"
+                    },
+                    {
+                        "Key": "tr:project-name",
+                        "Value": "206706-tech-toc-vn"
+                    },
+                    {
+                        "Key": "tr:resource-owner",
+                        "Value": "vamon.ngwa@thomsonreuters.com"
+                    },
+                    {
+                        "Key": "tr:service-name",
+                        "Value": "cicd"
+                    }
+                ],
+                "TimeoutInMinutes": 480,
+                "VpcConfig": {
+                    "SecurityGroupIds": [
+                        {
+                            "Fn::GetAtt": [
+                                "CBSecurityGroup",
+                                "GroupId"
+                            ]
+                        }
+                    ],
+                    "Subnets": [
+                        "subnet-0273058599f1226b9",
+                        "subnet-0f6801631655d919b",
+                        "subnet-0ebca6baa73aa2877"
+                    ],
+                    "VpcId": "vpc-0f71a5f77d9183ff1"
+                }
+            },
+            "Type": "AWS::CodeBuild::Project"
+        },
+        "CBdevexecute": {
+            "Properties": {
+                "Artifacts": {
+                    "Name": "a206706-cicd-206706-tech-toc-vn-iac-dev-execute",
+                    "Type": "CODEPIPELINE"
+                },
+                "Description": "a206706-cicd-206706-tech-toc-vn IaC tool. Environment: dev Type: execute",
+                "Environment": {
+                    "ComputeType": "BUILD_GENERAL1_SMALL",
+                    "EnvironmentVariables": [
+                        {
+                            "Name": "NOTIFICATION_SNS",
+                            "Value": {
+                                "Ref": "SNSTdev"
+                            }
+                        }
+                    ],
+                    "Image": "460300312212.dkr.ecr.us-east-1.amazonaws.com/a204503/cloud-iac:2.1.4",
+                    "ImagePullCredentialsType": "SERVICE_ROLE",
+                    "Type": "LINUX_CONTAINER"
+                },
+                "Name": "a206706-cicd-206706-tech-toc-vn-iac-dev-execute",
+                "ServiceRole": {
+                    "Fn::GetAtt": [
+                        "CodebuildIAMRole",
+                        "Arn"
+                    ]
+                },
+                "Source": {
+                    "BuildSpec": "\n            version: 0.2\n            \n            phases:\n              build:\n                commands:\n                  - cd $CODEBUILD_SRC_DIR\n                  - cloud-iac deployer execute dev",
+                    "Type": "CODEPIPELINE"
+                },
+                "Tags": [
+                    {
+                        "Key": "tr:application-asset-insight-id",
+                        "Value": "206706"
+                    },
+                    {
+                        "Key": "tr:environment-name",
+                        "Value": "dev"
+                    },
+                    {
+                        "Key": "tr:environment-type",
+                        "Value": "DEVELOPMENT"
+                    },
+                    {
+                        "Key": "tr:project-name",
+                        "Value": "206706-tech-toc-vn"
+                    },
+                    {
+                        "Key": "tr:resource-owner",
+                        "Value": "vamon.ngwa@thomsonreuters.com"
+                    },
+                    {
+                        "Key": "tr:service-name",
+                        "Value": "cicd"
+                    }
+                ],
+                "TimeoutInMinutes": 480,
+                "VpcConfig": {
+                    "SecurityGroupIds": [
+                        {
+                            "Fn::GetAtt": [
+                                "CBSecurityGroup",
+                                "GroupId"
+                            ]
+                        }
+                    ],
+                    "Subnets": [
+                        "subnet-0273058599f1226b9",
+                        "subnet-0f6801631655d919b",
+                        "subnet-0ebca6baa73aa2877"
+                    ],
+                    "VpcId": "vpc-0f71a5f77d9183ff1"
+                }
+            },
+            "Type": "AWS::CodeBuild::Project"
+        },
+        "CPdevdryrun": {
+            "Properties": {
+                "ArtifactStore": {
+                    "Location": {
+                        "Ref": "ArtifactBucket"
+                    },
+                    "Type": "S3"
+                },
+                "Name": "a206706-cicd-206706-tech-toc-vn-iac-dev-dryrun",
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "CodepipelineIAMRole",
+                        "Arn"
+                    ]
+                },
+                "Stages": [
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Source",
+                                    "Owner": "ThirdParty",
+                                    "Provider": "GitHub",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "Branch": "main",
+                                    "OAuthToken": {
+                                        "Ref": "GitHubToken"
+                                    },
+                                    "Owner": "tr",
+                                    "PollForSourceChanges": false,
+                                    "Repo": "tech-toc_system"
+                                },
+                                "Name": "Source",
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "CONFIG"
+                                    }
+                                ],
+                                "RunOrder": 1
+                            }
+                        ],
+                        "Name": "Source"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Build",
+                                    "Owner": "AWS",
+                                    "Provider": "CodeBuild",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "ProjectName": {
+                                        "Ref": "CBdevdryrun"
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "CONFIG"
+                                    }
+                                ],
+                                "Name": "dryrun",
+                                "RunOrder": 1
+                            }
+                        ],
+                        "Name": "dryrun"
+                    }
+                ]
+            },
+            "Type": "AWS::CodePipeline::Pipeline"
+        },
+        "CPdevexecute": {
+            "Properties": {
+                "ArtifactStore": {
+                    "Location": {
+                        "Ref": "ArtifactBucket"
+                    },
+                    "Type": "S3"
+                },
+                "Name": "a206706-cicd-206706-tech-toc-vn-iac-dev-execute",
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "CodepipelineIAMRole",
+                        "Arn"
+                    ]
+                },
+                "Stages": [
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Source",
+                                    "Owner": "AWS",
+                                    "Provider": "S3",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "PollForSourceChanges": false,
+                                    "S3Bucket": "a206706-iac-source-vn",
+                                    "S3ObjectKey": "tech-toc/dev/execute/config.zip"
+                                },
+                                "Name": "Source",
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "CONFIG"
+                                    }
+                                ],
+                                "RunOrder": 1
+                            }
+                        ],
+                        "Name": "Source"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Build",
+                                    "Owner": "AWS",
+                                    "Provider": "CodeBuild",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "ProjectName": {
+                                        "Ref": "CBdevexecute"
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "CONFIG"
+                                    }
+                                ],
+                                "Name": "execute",
+                                "RunOrder": 1
+                            }
+                        ],
+                        "Name": "execute"
+                    }
+                ]
+            },
+            "Type": "AWS::CodePipeline::Pipeline"
+        },
+        "CodebuildIAMRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codebuild.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/service-role/",
+                "PermissionsBoundary": {
+                    "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:policy/tr-permission-boundary"
+                },
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "AllowCloudwatchLogAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "s3:GetObject",
+                                        "s3:GetObjectVersion",
+                                        "s3:PutObject",
+                                        "s3:CopyObject"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    {
+                                                        "Ref": "ArtifactBucket"
+                                                    },
+                                                    "/*"
+                                                ]
+                                            ]
+                                        }
+                                    ],
+                                    "Sid": "AllowS3ArtifactAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "s3:GetObject",
+                                        "s3:GetObjectVersion",
+                                        "s3:PutObject",
+                                        "s3:CopyObject"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    "a206706-iac-source-vn",
+                                                    "/*"
+                                                ]
+                                            ]
+                                        },
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    "a206706-iac-source",
+                                                    "/*"
+                                                ]
+                                            ]
+                                        }
+                                    ],
+                                    "Sid": "AllowS3SourceTemplateObjectAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "s3:HeadBucket",
+                                        "s3:ListBucket"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    "a206706-iac-source-vn"
+                                                ]
+                                            ]
+                                        }
+                                    ],
+                                    "Sid": "AllowS3SourceAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "sts:AssumeRole",
+                                        "iam:PassRole"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "AllowAssumeRoleAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "sns:Publish"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:sns:us-east-1:818565325759:a206706-cicd-206706-tech-toc-vn-iac-sns-dev"
+                                    ],
+                                    "Sid": "AllowApprovalSNSTopicAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "dynamodb:GetItem",
+                                        "dynamodb:PutItem"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:dynamodb:us-east-1:818565325759:table/a206706-iac-pipeline"
+                                    ],
+                                    "Sid": "AllowDynamoDBTransactionAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "ec2:DescribeRegions"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "AllowEC2RegionAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "cloudformation:DescribeStacks",
+                                        "cloudformation:DescribeStackEvents",
+                                        "cloudformation:ValidateTemplate"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "AllowStackOps"
+                                },
+                                {
+                                    "Action": [
+                                        "ecr:BatchGetImage",
+                                        "ecr:GetDownloadUrlForLayer",
+                                        "ecr:BatchCheckLayerAvailability",
+                                        "ecr:ListImages"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:ecr:*:460300312212:repository/a204503/cloud-iac"
+                                    ],
+                                    "Sid": "AllowEcrAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "ecr:GetAuthorizationToken"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "EcrAuthToken"
+                                },
+                                {
+                                    "Action": [
+                                        "codepipeline:ListPipelineExecutions",
+                                        "codepipeline:ListActionExecutions"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "AllowCodePipelineReadAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "ses:SendEmail",
+                                        "ses:SendRawEmail",
+                                        "ses:SendTemplatedEmail"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "AllowSendingEmail"
+                                },
+                                {
+                                    "Action": [
+                                        "ssm:GetParameter",
+                                        "ssm:GetParameters",
+                                        "kms:Decrypt"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "AllowSSMAccess"
+                                }
+                            ]
+                        },
+                        "PolicyName": "CodeBuildPolicy"
+                    },
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "ec2:CreateNetworkInterface",
+                                        "ec2:DescribeDhcpOptions",
+                                        "ec2:DescribeNetworkInterfaces",
+                                        "ec2:DeleteNetworkInterface",
+                                        "ec2:DescribeSubnets",
+                                        "ec2:DescribeSecurityGroups",
+                                        "ec2:DescribeVpcs"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "AllowVPCandNetworkInterfaceAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "ec2:CreateNetworkInterfacePermission"
+                                    ],
+                                    "Condition": {
+                                        "StringEquals": {
+                                            "ec2:AuthorizedService": [
+                                                "codebuild.amazonaws.com"
+                                            ],
+                                            "ec2:Subnet": [
+                                                "arn:aws:ec2:us-east-1:818565325759:subnet/subnet-0273058599f1226b9",
+                                                "arn:aws:ec2:us-east-1:818565325759:subnet/subnet-0f6801631655d919b",
+                                                "arn:aws:ec2:us-east-1:818565325759:subnet/subnet-0ebca6baa73aa2877"
+                                            ]
+                                        }
+                                    },
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:ec2:us-east-1:818565325759:network-interface/*"
+                                    ],
+                                    "Sid": "AllowCreateNetworkInterfacePermission"
+                                }
+                            ]
+                        },
+                        "PolicyName": "CodeBuildVpcTrust"
+                    }
+                ],
+                "RoleName": "a206706-cicd-206706-tech-toc-vn-iac-cb"
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "CodepipelineIAMRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codepipeline.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/service-role/",
+                "PermissionsBoundary": {
+                    "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:policy/tr-permission-boundary"
+                },
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "s3:GetObject",
+                                        "s3:GetObjectVersion"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    "a206706-iac-source-vn",
+                                                    "/*"
+                                                ]
+                                            ]
+                                        }
+                                    ],
+                                    "Sid": "AllowDryrunExecuteSourceS3BucketGet"
+                                },
+                                {
+                                    "Action": [
+                                        "s3:GetObjectAcl",
+                                        "s3:GetObjectVersionAcl",
+                                        "s3:PutBucketAcl",
+                                        "s3:DeleteObject",
+                                        "s3:GetObjectRetention",
+                                        "s3:ListMultipartUploadParts",
+                                        "s3:PutObject",
+                                        "s3:GetObject",
+                                        "s3:GetBucketVersioning",
+                                        "s3:DeleteObjectVersion",
+                                        "s3:ListBucketVersions",
+                                        "s3:RestoreObject",
+                                        "s3:ListBucket",
+                                        "s3:GetBucketPolicy",
+                                        "s3:AbortMultipartUpload",
+                                        "s3:DeleteBucket",
+                                        "s3:PutObjectAcl",
+                                        "s3:ListBucketMultipartUploads",
+                                        "s3:GetBucketAcl",
+                                        "s3:ListAllMyBuckets",
+                                        "s3:PutObjectRetention",
+                                        "s3:PutBucketPolicy",
+                                        "s3:GetBucketLocation",
+                                        "s3:GetObjectVersion"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    "a206706-iac-source-vn"
+                                                ]
+                                            ]
+                                        },
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    "a206706-iac-source-vn",
+                                                    "/*"
+                                                ]
+                                            ]
+                                        },
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    {
+                                                        "Ref": "ArtifactBucket"
+                                                    }
+                                                ]
+                                            ]
+                                        },
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    {
+                                                        "Ref": "ArtifactBucket"
+                                                    },
+                                                    "/*"
+                                                ]
+                                            ]
+                                        }
+                                    ],
+                                    "Sid": "S3Permissions"
+                                },
+                                {
+                                    "Action": [
+                                        "codebuild:*"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:codebuild:us-east-1:818565325759:project/a206706-cicd-206706-tech-toc-vn-iac-dev-dryrun",
+                                        "arn:aws:codebuild:us-east-1:818565325759:project/a206706-cicd-206706-tech-toc-vn-iac-dev-execute"
+                                    ],
+                                    "Sid": "AllowCodeBuildAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "codestar-connections:ListConnections",
+                                        "codestar-connections:ListTagsForResource"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "*"
+                                    ],
+                                    "Sid": "AllowListConnections"
+                                },
+                                {
+                                    "Action": [
+                                        "codestar-connections:UseConnection",
+                                        "codestar-connections:GetConnection",
+                                        "codestar-connections:PassConnection"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:codestar-connections:*:",
+                                                    {
+                                                        "Ref": "AWS::AccountId"
+                                                    },
+                                                    ":connection/*"
+                                                ]
+                                            ]
+                                        }
+                                    ],
+                                    "Sid": "AllowUseConnections"
+                                }
+                            ]
+                        },
+                        "PolicyName": "CodePipelineAccessPolicy"
+                    }
+                ],
+                "RoleName": "a206706-cicd-206706-tech-toc-vn-iac-pipeline"
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "DeleteLambdaExeRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/service-role/",
+                "PermissionsBoundary": {
+                    "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:policy/tr-permission-boundary"
+                },
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "cloudformation:DeleteStack",
+                                        "cloudformation:DescribeStacks"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:cloudformation:*:818565325759:stack/a206706*"
+                                    ],
+                                    "Sid": "CloudformationAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "sts:AssumeRole"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:iam::818565325759:role/service-role/a206706-cicd-206706-tech-toc-vn-deploy"
+                                    ],
+                                    "Sid": "STSAccess"
+                                },
+                                {
+                                    "Action": [
+                                        "logs:CreateLogGroup"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+                                        }
+                                    ],
+                                    "Sid": "CreateCloudWatchLogGroup"
+                                },
+                                {
+                                    "Action": [
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/a206706-cicd-206706-tech-toc-vn*:*"
+                                        }
+                                    ],
+                                    "Sid": "WriteLogsToCloudWatch"
+                                }
+                            ]
+                        },
+                        "PolicyName": "ExecutionPolicy"
+                    }
+                ],
+                "RoleName": "a206706-cicd-206706-tech-toc-vn-iac-lmb-del"
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "DeleteStacks": {
+            "Properties": {
+                "Code": {
+                    "ZipFile": "import logging\n\nfrom boto3 import client\nfrom boto3 import Session\nfrom botocore.exceptions import ClientError\nsts_client = client('sts')\n\nlogger = logging.getLogger()\nlogger.setLevel(logging.INFO)\n\n\ndef is_dependent_complete(stack_name, workitems):\n    \"\"\"\n    Determine if stack has been run yet\n    :param stack_name: stack name\n    :param workitems: Master list of workitems\n    :return: True stack can be deleted. False it must wait for the other stacks to be deleted\n    \"\"\"\n    for wi in workitems:\n        if wi['stack_name'] == stack_name:\n            if wi['status'] != 'PENDING':\n                return True\n            else:\n                return False\n    logger.warning(\"Dependent Stack: {} not found in workitems list\".format(stack_name))\n    return True\n\n\ndef calculate_exe_workitems(workitems):\n    \"\"\"\n    Takes the passed in list of workitems and calculates which stacks can be deleted.\n    :param workitems: Master list of passed in workitems\n    :return: Executable workitems that can be deletes this pass\n    \"\"\"\n    exe_workitems = []\n    for wi in workitems:\n        if wi['status'] == 'PENDING':\n            if len(wi['dependencies']) > 0:\n                for depend in wi['dependencies']:\n                    depend_complete = is_dependent_complete(depend, workitems)\n                    if depend_complete:\n                        exe_workitems.append(wi)\n            else:\n                exe_workitems.append(wi)\n    return exe_workitems\n\n\ndef handler(event, context):\n    \"\"\"\n    Calculates which stacks can be deleted and calls delete stack on them\n    :param event: list of work items\n    :param context: Lambda context\n    :return: Current status, including which workitems it are deleting this pass\n    \"\"\"\n    logger.info(event)\n    workitems = event['workitems']\n\n    exe_workitems = calculate_exe_workitems(workitems)\n\n    for wi in list(exe_workitems):\n        stack_name = wi['stack_name']\n        iam_role = wi['iam_role']\n        region = wi['region']\n        depends = wi['dependencies']\n        status = wi['status']\n        logger.info(\"Stack Name: {}\".format(stack_name))\n        logger.info(\"IAM Role: {}\".format(iam_role))\n        logger.info(\"Region: {}\".format(region))\n        logger.info(\"Dependencies: {}\".format(', '.join(depends)))\n        logger.info(\"Status: {}\".format(status))\n\n        try:\n            response = sts_client.assume_role(\n                RoleArn=iam_role,\n                RoleSessionName='cloud-iac-lambda-delete'\n            )\n        except ClientError as e:\n            logger.warning(\"Could not assume role: {} | {}\".format(iam_role, str(e)))\n            exe_workitems.remove(wi)\n            for mwi in workitems:\n                if mwi['stack_name'] == stack_name:\n                    mwi['status'] = 'ASSUME_ROLE_FAILED'\n            continue\n\n        credentials = response['Credentials']\n        assume_session = Session(\n            aws_access_key_id=credentials['AccessKeyId'],\n            aws_secret_access_key=credentials['SecretAccessKey'],\n            aws_session_token=credentials['SessionToken']\n        )\n\n        cfn = assume_session.client('cloudformation', region_name=region)\n\n        # Get stack id from stack name. Stack Id is preserved through deletes unlike stack name\n        try:\n            response = cfn.describe_stacks(\n                StackName=stack_name\n            )\n        except ClientError as e:\n            logger.warning(\"StackName={} was not found. Cannot continue delete. | {}\".format(stack_name, str(e)))\n            exe_workitems.remove(wi)\n            for mwi in workitems:\n                if mwi['stack_name'] == stack_name:\n                    mwi['status'] = 'STACK_NOT_FOUND'\n            continue\n\n        stack_id = response['Stacks'][0]['StackId']\n        wi['stack_id'] = stack_id\n\n        cfn.delete_stack(\n            StackName=stack_id\n        )\n        logger.info(\"Stack: {}: delete api called\".format(stack_name))\n    event['executable_workitems'] = exe_workitems\n    return event\n"
+                },
+                "FunctionName": "a206706-cicd-206706-tech-toc-vn-iac-delete-stack",
+                "Handler": "index.handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "DeleteLambdaExeRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.6",
+                "Tags": [
+                    {
+                        "Key": "tr:application-asset-insight-id",
+                        "Value": "206706"
+                    },
+                    {
+                        "Key": "tr:environment-name",
+                        "Value": "dev"
+                    },
+                    {
+                        "Key": "tr:environment-type",
+                        "Value": "DEVELOPMENT"
+                    },
+                    {
+                        "Key": "tr:project-name",
+                        "Value": "206706-tech-toc-vn"
+                    },
+                    {
+                        "Key": "tr:resource-owner",
+                        "Value": "vamon.ngwa@thomsonreuters.com"
+                    },
+                    {
+                        "Key": "tr:service-name",
+                        "Value": "cicd"
+                    }
+                ],
+                "Timeout": 120
+            },
+            "Type": "AWS::Lambda::Function"
+        },
+        "DeleteStacksLogGroup": {
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/${DeleteStacks}"
+                },
+                "RetentionInDays": 90
+            },
+            "Type": "AWS::Logs::LogGroup"
+        },
+        "EventsPipelineExeRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "events.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/service-role/",
+                "PermissionsBoundary": {
+                    "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:policy/tr-permission-boundary"
+                },
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "codepipeline:StartPipelineExecution"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:codepipeline:us-east-1:818565325759:a206706-cicd-206706-tech-toc-vn-iac-dev-dryrun",
+                                        "arn:aws:codepipeline:us-east-1:818565325759:a206706-cicd-206706-tech-toc-vn-iac-dev-execute"
+                                    ],
+                                    "Sid": "AllowCodePipelineExeAccess"
+                                }
+                            ]
+                        },
+                        "PolicyName": "cwe-pipeline-exec"
+                    }
+                ],
+                "RoleName": "a206706-cicd-206706-tech-toc-vn-cwe-exe"
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "IaCDeleteStateMachine": {
+            "Properties": {
+                "DefinitionString": {
+                    "Fn::Sub": "                {                  \"StartAt\": \"DeleteStacks\",                  \"States\": {                    \"DeleteStacks\": {                      \"Type\": \"Task\",                      \"Resource\": \"${DeleteStacks.Arn}\",                      \"Next\": \"MonitorStacks\"                    },                    \"MonitorStacks\": {                      \"Type\": \"Task\",                      \"Resource\": \"${MonitorStacks.Arn}\",                      \"TimeoutSeconds\": 900,                      \"Retry\": [ {                            \"ErrorEquals\": [\"States.Timeout\"],                            \"IntervalSeconds\": 1,                            \"MaxAttempts\": 4,                            \"BackoffRate\": 1.0                         } ],                      \"Next\": \"DoneOrNot\"                    },                    \"DoneOrNot\": {                      \"Type\": \"Choice\",                      \"Choices\": [                        {                            \"Variable\": \"$.remaining\",                            \"NumericGreaterThan\": 0,                            \"Next\": \"DeleteStacks\"                        },                        {                            \"Variable\": \"$.remaining\",                            \"NumericEquals\": 0,                            \"Next\": \"Done\"                        }                      ]                    },                    \"Done\": {                      \"Type\": \"Pass\",                      \"End\": true                    }                  }                }                "
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "StepFunctionExeRole",
+                        "Arn"
+                    ]
+                },
+                "StateMachineName": "a206706-cicd-206706-tech-toc-vn-iac-delete"
+            },
+            "Type": "AWS::StepFunctions::StateMachine"
+        },
+        "LambdaExeRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/service-role/",
+                "PermissionsBoundary": {
+                    "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:policy/tr-permission-boundary"
+                },
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:logs:us-east-1:818565325759:log-group:/aws/lambda/a206706-cicd-206706-tech-toc-vn-iac-approval:*"
+                                    ],
+                                    "Sid": "WriteLogsToCloudWatch"
+                                },
+                                {
+                                    "Action": [
+                                        "s3:PutObject"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    "a206706-iac-source-vn",
+                                                    "/*"
+                                                ]
+                                            ]
+                                        }
+                                    ],
+                                    "Sid": "AllowS3SourceBucket"
+                                },
+                                {
+                                    "Action": [
+                                        "s3:GetObject",
+                                        "s3:GetObjectVersion"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    {
+                                                        "Fn::GetAtt": [
+                                                            "ArtifactBucket",
+                                                            "Arn"
+                                                        ]
+                                                    },
+                                                    "/*"
+                                                ]
+                                            ]
+                                        }
+                                    ],
+                                    "Sid": "AllowS3ArtifactBucket"
+                                },
+                                {
+                                    "Action": [
+                                        "s3:ListBucket",
+                                        "s3:GetBucketVersioning"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::GetAtt": [
+                                                "ArtifactBucket",
+                                                "Arn"
+                                            ]
+                                        },
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:s3:::",
+                                                    "a206706-iac-source-vn"
+                                                ]
+                                            ]
+                                        }
+                                    ],
+                                    "Sid": "AllowS3BucketListBucket"
+                                }
+                            ]
+                        },
+                        "PolicyName": "a206706-cicd-206706-tech-toc-vn-iac-approvalLambda"
+                    }
+                ],
+                "RoleName": "a206706-cicd-206706-tech-toc-vn-iac-approval"
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "MonitorStacks": {
+            "Properties": {
+                "Code": {
+                    "ZipFile": "import logging\n\nfrom boto3 import client\nfrom boto3 import Session\nfrom botocore.exceptions import WaiterError\nsts_client = client('sts')\n\nlogger = logging.getLogger()\nlogger.setLevel(logging.INFO)\n\n\ndef lookup_workitem(stack_name, workitems):\n    \"\"\"\n    Lookup a workitem based on stack name\n    :param stack_name: (str) Stack name to lookup\n    :param workitems: (list) List of workitems to look through\n    :return: Workitem if found else None\n    \"\"\"\n    for workitem in workitems:\n        if workitem['stack_name'] == stack_name:\n            return workitem\n    return None\n\n\ndef calculate_remaining(workitems):\n    \"\"\"\n    Loops through the list of workitems to calculate the remaining workitems left to be processed\n    :param workitems: (list) master list of workitems\n    :return: (int) remaining pending workitems\n    \"\"\"\n    remaining = 0\n    for workitem in workitems:\n        if workitem['status'] == 'PENDING':\n            remaining += 1\n    return remaining\n\n\ndef handler(event, context):\n    \"\"\"\n    Main hanlder function. Orchestrates the monitoring of the passed in 'executable' workitems\n    :param event: Lambda handler event (contains the list of workitems to process)\n    :param context: Lambda handler context\n    :return: Current status of the event. Including the remaining workitems and status of completed ones\n    \"\"\"\n    logger.info(event)\n    master_workitems = event['workitems']\n    workitems = event['executable_workitems']\n\n    # Monitor deleting stacks\n    for workitem in workitems:\n        stack_name = workitem['stack_name']\n        stack_id = workitem['stack_id']\n        iam_role = workitem['iam_role']\n        region = workitem['region']\n        depends = workitem['dependencies']\n        status = workitem['status']\n        logger.info(\"Stack Name: {}\".format(stack_name))\n        logger.info(\"Stack Id: {}\".format(stack_id))\n        logger.info(\"IAM Role: {}\".format(iam_role))\n        logger.info(\"Region: {}\".format(region))\n        logger.info(\"Dependencies: {}\".format(', '.join(depends)))\n        logger.info(\"status: {}\".format(status))\n\n        # Assume role\n        response = sts_client.assume_role(\n            RoleArn=iam_role,\n            RoleSessionName='cloud-iac-lambda-delete'\n        )\n\n        # Build session\n        credentials = response['Credentials']\n        assume_session = Session(\n            aws_access_key_id=credentials['AccessKeyId'],\n            aws_secret_access_key=credentials['SecretAccessKey'],\n            aws_session_token=credentials['SessionToken']\n        )\n\n        # Monitor stacks\n        cfn_client = assume_session.client('cloudformation', region_name=region)\n        waiter = cfn_client.get_waiter('stack_delete_complete')\n        master_workitem = lookup_workitem(stack_name, master_workitems)\n        if master_workitem:\n            try:\n                waiter.wait(\n                    StackName=stack_id\n                )\n                # Update master workitem\n                master_workitem['status'] = \"DELETE_COMPLETE\"\n            except WaiterError as e:\n                logger.warning(\"Error deleting Stack: {} | \".format(stack_name, str(e)))\n                master_workitem['status'] = \"DELETE_FAILED\"\n        else:\n            logger.warning(\"Stack Name: {} not found in workitem list.\")\n\n    event['remaining'] = calculate_remaining(master_workitems)\n    logger.info(\"Remaining: {}\".format(event['remaining']))\n    return event\n"
+                },
+                "FunctionName": "a206706-cicd-206706-tech-toc-vn-iac-monitor-stack",
+                "Handler": "index.handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "DeleteLambdaExeRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.6",
+                "Tags": [
+                    {
+                        "Key": "tr:application-asset-insight-id",
+                        "Value": "206706"
+                    },
+                    {
+                        "Key": "tr:environment-name",
+                        "Value": "dev"
+                    },
+                    {
+                        "Key": "tr:environment-type",
+                        "Value": "DEVELOPMENT"
+                    },
+                    {
+                        "Key": "tr:project-name",
+                        "Value": "206706-tech-toc-vn"
+                    },
+                    {
+                        "Key": "tr:resource-owner",
+                        "Value": "vamon.ngwa@thomsonreuters.com"
+                    },
+                    {
+                        "Key": "tr:service-name",
+                        "Value": "cicd"
+                    }
+                ],
+                "Timeout": 900
+            },
+            "Type": "AWS::Lambda::Function"
+        },
+        "MonitorStacksLogGroup": {
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/${MonitorStacks}"
+                },
+                "RetentionInDays": 90
+            },
+            "Type": "AWS::Logs::LogGroup"
+        },
+        "PipelineWebhook": {
+            "Properties": {
+                "Authentication": "GITHUB_HMAC",
+                "AuthenticationConfiguration": {
+                    "SecretToken": {
+                        "Ref": "GitHubToken"
+                    }
+                },
+                "Filters": [
+                    {
+                        "JsonPath": "$.ref",
+                        "MatchEquals": "refs/heads/{Branch}"
+                    }
+                ],
+                "Name": "a206706-cicd-206706-tech-toc-vn-PipelineWebhook",
+                "RegisterWithThirdParty": "true",
+                "TargetAction": "Source",
+                "TargetPipeline": {
+                    "Ref": "CPdevdryrun"
+                },
+                "TargetPipelineVersion": {
+                    "Fn::GetAtt": [
+                        "CPdevdryrun",
+                        "Version"
+                    ]
+                }
+            },
+            "Type": "AWS::CodePipeline::Webhook"
+        },
+        "SNSSubdev0": {
+            "DeletionPolicy": "Retain",
+            "Properties": {
+                "Endpoint": "vamon.ngwa@thomsonreuters.com",
+                "Protocol": "email",
+                "TopicArn": {
+                    "Ref": "SNSTdev"
+                }
+            },
+            "Type": "AWS::SNS::Subscription"
+        },
+        "SNSTPdev": {
+            "Properties": {
+                "PolicyDocument": {
+                    "Id": "__default_policy_ID",
+                    "Statement": [
+                        {
+                            "Action": [
+                                "SNS:Subscribe"
+                            ],
+                            "Condition": {
+                                "StringEquals": {
+                                    "AWS:SourceOwner": "818565325759"
+                                }
+                            },
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": "*"
+                            },
+                            "Resource": {
+                                "Ref": "SNSTdev"
+                            },
+                            "Sid": "UniversalPermissions"
+                        },
+                        {
+                            "Action": "SNS:Publish",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "events.amazonaws.com"
+                            },
+                            "Resource": {
+                                "Ref": "SNSTdev"
+                            },
+                            "Sid": "devRuleTarget"
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "Topics": [
+                    {
+                        "Ref": "SNSTdev"
+                    }
+                ]
+            },
+            "Type": "AWS::SNS::TopicPolicy"
+        },
+        "SNSTdev": {
+            "Properties": {
+                "DisplayName": "a206706-cicd-206706-tech-toc-vn-dev IaC Project Approval/Notification",
+                "TopicName": "a206706-cicd-206706-tech-toc-vn-iac-sns-dev"
+            },
+            "Type": "AWS::SNS::Topic"
+        },
+        "StepFunctionExeRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "states.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/service-role/",
+                "PermissionsBoundary": {
+                    "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:policy/tr-permission-boundary"
+                },
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "lambda:InvokeFunction"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:a206706-cicd-206706-tech-toc-vn-iac-delete-stack"
+                                        },
+                                        {
+                                            "Fn::Sub": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:a206706-cicd-206706-tech-toc-vn-iac-monitor-stack"
+                                        }
+                                    ],
+                                    "Sid": "InvokeLambda"
+                                }
+                            ]
+                        },
+                        "PolicyName": "InvokeLambda"
+                    }
+                ],
+                "RoleName": "a206706-cicd-206706-tech-toc-vn-iac-stf-del"
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "devexeCWErule": {
+            "Properties": {
+                "Description": "Kick off the relevant CodePipeline pipeline upon a PutObject or CompleteMultipartUpload S3 event.",
+                "EventPattern": {
+                    "detail": {
+                        "eventName": [
+                            "PutObject",
+                            "CompleteMultipartUpload"
+                        ],
+                        "eventSource": [
+                            "s3.amazonaws.com"
+                        ],
+                        "resources": {
+                            "ARN": [
+                                "arn:aws:s3:::a206706-iac-source-vn/tech-toc/dev/execute/config.zip"
+                            ]
+                        }
+                    },
+                    "detail-type": [
+                        "AWS API Call via CloudTrail"
+                    ],
+                    "source": [
+                        "aws.s3"
+                    ]
+                },
+                "Name": "a206706-cicd-206706-tech-toc-vn-devexe-exe-rule",
+                "State": "ENABLED",
+                "Targets": [
+                    {
+                        "Arn": "arn:aws:codepipeline:us-east-1:818565325759:a206706-cicd-206706-tech-toc-vn-iac-dev-execute",
+                        "Id": "a206706-cicd-206706-tech-toc-vn-devexe",
+                        "RoleArn": {
+                            "Fn::GetAtt": [
+                                "EventsPipelineExeRole",
+                                "Arn"
+                            ]
+                        }
+                    }
+                ]
+            },
+            "Type": "AWS::Events::Rule"
+        },
+        "devrule": {
+            "Properties": {
+                "Description": "Sends an SNS notification when the attached pipeline fails",
+                "EventPattern": {
+                    "detail": {
+                        "pipeline": [
+                            "a206706-cicd-206706-tech-toc-vn-iac-dev-execute",
+                            "a206706-cicd-206706-tech-toc-vn-iac-dev-dryrun"
+                        ],
+                        "state": [
+                            "FAILED"
+                        ]
+                    },
+                    "detail-type": [
+                        "CodePipeline Pipeline Execution State Change"
+                    ],
+                    "source": [
+                        "aws.codepipeline"
+                    ]
+                },
+                "Name": "a206706-cicd-206706-tech-toc-vn-dev-rule",
+                "State": "ENABLED",
+                "Targets": [
+                    {
+                        "Arn": {
+                            "Ref": "SNSTdev"
+                        },
+                        "Id": "a206706-cicd-206706-tech-toc-vn-dev",
+                        "InputTransformer": {
+                            "InputPathsMap": {
+                                "pipeline": "$.detail.pipeline"
+                            },
+                            "InputTemplate": "\"The Pipeline <pipeline> has failed. More informaiton can be found at https://console.aws.amazon.com/codepipeline/home?region=us-east-1#/view/<pipeline>\""
+                        }
+                    }
+                ]
+            },
+            "Type": "AWS::Events::Rule"
+        }
+    }
+}
